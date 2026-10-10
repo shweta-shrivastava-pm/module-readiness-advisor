@@ -21,7 +21,7 @@ Given a request such as "a BigQuery setup for an analytics workload", the adviso
 
 Early stage. The product requirements and a 23 case evaluation set are written. The code is being built next.
 
-See `module-readiness-advisor-prd.md` for the full requirements and `evaluation-set.md` for the test cases.
+See `docs/module-readiness-advisor-prd.md` for the full requirements and `docs/evaluation-set.md` for the test cases.
 
 ## Note
 
