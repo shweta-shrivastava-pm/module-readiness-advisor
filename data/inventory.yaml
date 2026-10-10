@@ -1,0 +1,17 @@
+# What the organisation already has.
+# The advisor checks every request against this list before suggesting new work.
+# All entries are synthetic examples, not from any real organisation.
+
+existing_resources:
+  - id: shared_vpc
+    name: Shared VPC with subnets in two regions
+    cloud: gcp
+  - id: private_dns_zone
+    name: Cloud DNS private zone
+    cloud: gcp
+  - id: kms_key_ring
+    name: Central KMS key ring
+    cloud: gcp
+  - id: artifact_registry
+    name: Shared Artifact Registry
+    cloud: gcp
