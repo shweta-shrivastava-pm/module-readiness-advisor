@@ -1,0 +1,58 @@
+# What each capability breaks into, and what each piece needs.
+# Built from public Google Cloud documentation. Synthetic examples only.
+#
+# Dependency types:
+#   module_or_resource   another piece must exist first
+#   existing_repository  something the application team already has
+#   networking           network setup needed first
+#   security_iam         identity or permission needed first
+#   platform             a cloud API to switch on, usually quick
+#   approval             a decision from architecture or the customer
+
+capabilities:
+
+  - id: private_storage_bucket
+    name: Private storage bucket
+    sub_modules:
+      - id: storage_bucket
+        story: storage
+        uses: [kms_key_ring]
+      - id: bucket_iam_binding
+        story: storage
+        uses: [storage_bucket]
+    dependencies:
+      - type: security_iam
+        need: Service account for the application that writes to the bucket
+
+  - id: cloud_run_internal_api
+    name: Cloud Run service for an internal API
+    sub_modules:
+      - id: cloud_run_service
+        story: compute
+        uses: [artifact_registry]
+      - id: service_account
+        story: compute
+      - id: vpc_connector
+        story: networking
+        uses: [shared_vpc]
+    dependencies:
+      - type: networking
+        need: Subnet range for the VPC connector
+      - type: platform
+        need: Cloud Run API enabled
+
+  - id: pubsub_pipeline
+    name: Pub/Sub topic and subscription
+    sub_modules:
+      - id: pubsub_topic
+        story: messaging
+      - id: pubsub_subscription
+        story: messaging
+        uses: [pubsub_topic]
+      - id: dead_letter_topic
+        story: messaging
+      - id: pubsub_iam_bindings
+        story: messaging
+    dependencies:
+      - type: platform
+        need: Pub/Sub API enabled
