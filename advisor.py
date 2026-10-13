@@ -1,4 +1,4 @@
-"""Module Readiness Advisor, version 0.2.
+"""Module Readiness Advisor, version 0.3.
 
 Reads the inventory and the module catalogue, prints a readiness
 breakdown for every capability, then scores itself against the
@@ -17,6 +17,9 @@ DECISION_TYPES = {"approval", "demand"}
 # Dependencies that stop work starting. Platform APIs are usually
 # quick to switch on, so they are reported but do not block.
 BLOCKING_TYPES = {"module_or_resource", "existing_repository", "networking", "security_iam"}
+
+# More new pieces than this is unlikely to fit one sprint as one item.
+SPLIT_THRESHOLD = 8
 
 
 def load(name):
@@ -75,6 +78,16 @@ def main():
             print(f"    - {d['type']}: {d['need']}")
         if not dependencies:
             print("    - none")
+
+        stories = sorted({part["story"] for part in build})
+        if len(build) > SPLIT_THRESHOLD:
+            print(f"  Sprint fit: Needs splitting. {len(build)} new pieces, "
+                  f"split into {len(stories)} stories: {', '.join(stories)}")
+        else:
+            word = "story" if len(stories) == 1 else "stories"
+            print(f"  Sprint fit: OK, {len(build)} new pieces in {len(stories)} {word}")
+        if capability.get("note"):
+            print(f"  Note: {capability['note']}")
 
         expected = capability.get("expected_readiness")
         if expected == readiness:

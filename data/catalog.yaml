@@ -319,3 +319,260 @@ capabilities:
         need: Which identities can call the model
       - type: approval
         need: What customer data the model may see, and whether prompts may be logged
+
+  - id: bigquery_analytics
+    case: "3"
+    expected_readiness: Needs decision
+    name: BigQuery setup for an analytics workload
+    sub_modules:
+      - id: bq_dataset
+        story: dataset
+        uses: [kms_key_ring]
+      - id: bq_tables
+        story: dataset
+        uses: [bq_dataset]
+      - id: partitioning_and_clustering
+        story: dataset
+        uses: [bq_tables]
+      - id: bq_views
+        story: dataset
+        uses: [bq_tables]
+      - id: authorised_views
+        story: access
+        uses: [bq_views]
+      - id: dataset_iam_bindings
+        story: access
+        uses: [bq_dataset]
+      - id: table_iam_bindings
+        story: access
+        uses: [bq_tables]
+      - id: scheduled_queries
+        story: loading
+        uses: [bq_tables]
+      - id: data_transfer_config
+        story: loading
+        uses: [bq_dataset]
+      - id: audit_log_sink
+        story: audit
+      - id: cost_controls
+        story: cost
+    dependencies:
+      - type: security_iam
+        need: Dataset level access model
+      - type: existing_repository
+        need: Where the source data already lives
+      - type: approval
+        need: Whether cost controls are in scope
+
+  - id: gke_cluster
+    case: "6"
+    expected_readiness: Blocked
+    name: GKE cluster for a containerised application
+    sub_modules:
+      - id: gke_cluster
+        story: cluster
+        uses: [shared_vpc]
+      - id: node_pools
+        story: cluster
+        uses: [gke_cluster]
+      - id: cluster_autoscaler_config
+        story: cluster
+        uses: [node_pools]
+      - id: gke_service_account
+        story: identity
+      - id: workload_identity
+        story: identity
+        uses: [gke_service_account, artifact_registry]
+      - id: network_policy
+        story: network_policy
+        uses: [gke_cluster]
+      - id: private_endpoint_config
+        story: cluster
+        uses: [gke_cluster]
+      - id: logging_monitoring_config
+        story: observability
+        uses: [gke_cluster]
+    dependencies:
+      - type: networking
+        need: Pod and service IP ranges on the subnet
+      - type: security_iam
+        need: Workload identity binding
+      - type: platform
+        need: GKE API enabled
+
+  - id: aks_cluster
+    case: "10"
+    expected_readiness: Blocked
+    name: Azure Kubernetes Service cluster
+    sub_modules:
+      - id: aks_cluster
+        story: cluster
+      - id: aks_node_pools
+        story: cluster
+        uses: [aks_cluster]
+      - id: aks_network_configuration
+        story: cluster
+        uses: [aks_cluster]
+      - id: managed_identity
+        story: identity
+      - id: role_assignments
+        story: identity
+        uses: [managed_identity]
+      - id: container_registry_access
+        story: identity
+        uses: [managed_identity]
+      - id: log_analytics_workspace
+        story: observability
+    dependencies:
+      - type: networking
+        need: Subnet with sufficient address space
+      - type: security_iam
+        need: Managed identity and role assignments approved
+
+  - id: storage_to_warehouse_pipeline
+    case: "12"
+    expected_readiness: Needs decision
+    name: Data pipeline from storage into the warehouse
+    sub_modules:
+      - id: source_bucket
+        story: source
+        uses: [kms_key_ring]
+      - id: bucket_notification
+        story: source
+        uses: [source_bucket, pipeline_topic]
+      - id: pipeline_topic
+        story: source
+      - id: pipeline_subscription
+        story: processing
+        uses: [pipeline_topic]
+      - id: processing_job
+        story: processing
+        uses: [pipeline_subscription]
+      - id: pipeline_dead_letter
+        story: processing
+      - id: pipeline_scheduling
+        story: processing
+        uses: [processing_job]
+      - id: destination_dataset
+        story: destination
+        uses: [kms_key_ring]
+      - id: destination_tables
+        story: destination
+        uses: [destination_dataset]
+      - id: pipeline_service_accounts
+        story: processing
+      - id: pipeline_iam_bindings
+        story: processing
+        uses: [pipeline_service_accounts]
+      - id: pipeline_monitoring
+        story: monitoring
+        uses: [processing_job]
+    dependencies:
+      - type: existing_repository
+        need: The source data location
+      - type: security_iam
+        need: Cross service permissions
+      - type: approval
+        need: Processing approach, for example Dataflow or Cloud Run
+
+  - id: public_load_balancer
+    case: "14"
+    expected_readiness: Needs decision
+    name: Load balancer for a public web application
+    note: The inventory has a private DNS zone. A near match is not a match, so the public zone is flagged as missing.
+    sub_modules:
+      - id: global_load_balancer
+        story: load_balancer
+        uses: [public_dns_zone]
+      - id: url_map
+        story: load_balancer
+        uses: [backend_service]
+      - id: forwarding_rule
+        story: load_balancer
+        uses: [global_load_balancer]
+      - id: backend_service
+        story: backend
+        uses: [health_check]
+      - id: health_check
+        story: backend
+      - id: ssl_certificate
+        story: certificate
+      - id: cloud_armor_policy
+        story: cloud_armor
+    dependencies:
+      - type: security_iam
+        need: Cloud Armor rules
+      - type: approval
+        need: The WAF ruleset
+
+  - id: azure_scheduled_function
+    case: "16"
+    expected_readiness: Blocked
+    name: Azure Function for scheduled processing
+    note: The storage account looks independent but the function app cannot run without it, so it shares the function app story.
+    sub_modules:
+      - id: function_app
+        story: function_app
+        uses: [app_service_plan, function_storage_account]
+      - id: app_service_plan
+        story: function_app
+      - id: function_storage_account
+        story: function_app
+      - id: function_managed_identity
+        story: identity
+      - id: function_role_assignments
+        story: identity
+        uses: [function_managed_identity]
+      - id: application_insights
+        story: observability
+    dependencies:
+      - type: security_iam
+        need: Managed identity permissions
+      - type: platform
+        need: Resource providers registered
+
+  - id: internal_api_service_account
+    case: "17"
+    expected_readiness: Needs decision
+    name: Service account for an application to call internal APIs
+    note: Keys are not created when workload identity is available.
+    sub_modules:
+      - id: app_service_account
+        story: identity
+        uses: [internal_apis]
+      - id: app_iam_role_bindings
+        story: identity
+        uses: [app_service_account]
+      - id: app_workload_identity_binding
+        story: identity
+        uses: [app_service_account]
+    dependencies:
+      - type: approval
+        need: Which roles are granted
+
+  - id: cloud_composer
+    case: "18"
+    expected_readiness: Blocked
+    name: Cloud Composer environment for orchestration
+    sub_modules:
+      - id: composer_environment
+        story: environment
+        uses: [shared_vpc, kms_key_ring]
+      - id: composer_private_ip_config
+        story: environment
+        uses: [composer_environment]
+      - id: composer_service_account
+        story: identity
+      - id: composer_iam_bindings
+        story: identity
+        uses: [composer_service_account]
+      - id: dags_bucket
+        story: dags_bucket
+        uses: [kms_key_ring]
+    dependencies:
+      - type: networking
+        need: Subnet ranges for the environment
+      - type: security_iam
+        need: Service account permissions
+      - type: platform
+        need: Composer API enabled
