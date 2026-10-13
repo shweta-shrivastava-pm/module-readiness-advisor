@@ -1,5 +1,5 @@
 # What each capability breaks into, and what each piece needs.
-# Built from public Google Cloud documentation. Synthetic examples only.
+# Built from public Google Cloud and Azure documentation. Synthetic examples only.
 #
 # Dependency types:
 #   module_or_resource   another piece must exist first
@@ -8,11 +8,17 @@
 #   security_iam         identity or permission needed first
 #   platform             a cloud API to switch on, usually quick
 #   approval             a decision from architecture or the customer
+#   demand               no team has confirmed it will use this yet
+#
+# case and expected_readiness link each entry to docs/evaluation-set.md,
+# so the advisor can score itself.
 
 capabilities:
 
   - id: private_storage_bucket
-    name: Private storage bucket
+    case: "1"
+    expected_readiness: Blocked
+    name: Private storage bucket for application logs
     sub_modules:
       - id: storage_bucket
         story: storage
@@ -25,6 +31,8 @@ capabilities:
         need: Service account for the application that writes to the bucket
 
   - id: cloud_run_internal_api
+    case: "2"
+    expected_readiness: Blocked
     name: Cloud Run service for an internal API
     sub_modules:
       - id: cloud_run_service
@@ -41,8 +49,30 @@ capabilities:
       - type: platform
         need: Cloud Run API enabled
 
+  - id: cloud_sql_unconfirmed
+    case: "3a"
+    expected_readiness: Needs decision
+    name: Cloud SQL instance with no confirmed consumer
+    sub_modules:
+      - id: cloud_sql_instance
+        story: database
+        uses: [shared_vpc, kms_key_ring]
+      - id: database
+        story: database
+      - id: database_users
+        story: database
+      - id: backup_configuration
+        story: backup
+      - id: private_service_access
+        story: networking
+    dependencies:
+      - type: demand
+        need: No application team has committed to consuming this module
+
   - id: pubsub_pipeline
-    name: Pub/Sub topic and subscription
+    case: "4"
+    expected_readiness: Ready
+    name: Pub/Sub topic and subscription for an event pipeline
     sub_modules:
       - id: pubsub_topic
         story: messaging
@@ -56,3 +86,236 @@ capabilities:
     dependencies:
       - type: platform
         need: Pub/Sub API enabled
+
+  - id: azure_storage_account
+    case: "5"
+    expected_readiness: Needs decision
+    name: Azure storage account for document retention
+    sub_modules:
+      - id: storage_account
+        story: storage
+      - id: storage_container
+        story: storage
+        uses: [storage_account]
+      - id: private_endpoint
+        story: networking
+      - id: diagnostic_settings
+        story: observability
+    dependencies:
+      - type: networking
+        need: Subnet for the private endpoint
+      - type: approval
+        need: Agreed IAM approach for the storage account
+
+  - id: private_dns_record
+    case: "7"
+    expected_readiness: Blocked
+    name: Private DNS record for an internal service
+    sub_modules:
+      - id: dns_record_set
+        story: networking
+        uses: [private_dns_zone, target_service]
+
+  - id: application_monitoring
+    case: "8"
+    expected_readiness: Needs decision
+    name: Monitoring and alerting for an existing application
+    sub_modules:
+      - id: notification_channels
+        story: alerting
+      - id: alert_policies
+        story: alerting
+        uses: [notification_channels]
+      - id: dashboards
+        story: dashboards
+      - id: uptime_checks
+        story: uptime
+      - id: log_based_metrics
+        story: alerting
+    dependencies:
+      - type: approval
+        need: Who receives alerts, and at what severity
+
+  - id: new_environment_network
+    case: "9"
+    expected_readiness: Needs decision
+    name: VPC and subnets for a new environment
+    sub_modules:
+      - id: vpc
+        story: network_core
+      - id: subnets
+        story: network_core
+        uses: [vpc]
+      - id: firewall_rules
+        story: firewall
+        uses: [vpc]
+      - id: cloud_router
+        story: egress
+        uses: [vpc]
+      - id: cloud_nat
+        story: egress
+        uses: [cloud_router]
+      - id: private_service_access
+        story: private_access
+        uses: [vpc]
+      - id: flow_logs
+        story: network_core
+        uses: [subnets]
+    dependencies:
+      - type: approval
+        need: IP address range allocation for the new environment
+
+  - id: reuse_shared_vpc
+    case: "11"
+    expected_readiness: Blocked
+    name: Reuse the existing shared VPC for a new application
+    sub_modules:
+      - id: subnet_iam_binding
+        story: access
+        uses: [shared_vpc]
+    dependencies:
+      - type: security_iam
+        need: The service account to bind
+
+  - id: application_secrets
+    case: "13"
+    expected_readiness: Blocked
+    name: Secrets management for an application
+    sub_modules:
+      - id: secret
+        story: secrets
+        uses: [kms_key_ring]
+      - id: secret_version
+        story: secrets
+        uses: [secret]
+      - id: secret_iam_bindings
+        story: access
+        uses: [secret]
+      - id: rotation_configuration
+        story: rotation
+        uses: [secret]
+    dependencies:
+      - type: security_iam
+        need: Who can access the secret, and the rotation policy
+      - type: platform
+        need: Secret Manager API enabled
+
+  - id: audit_log_sink_unconfirmed
+    case: "19"
+    expected_readiness: Needs decision
+    name: Audit log sink with no confirmed consumer
+    sub_modules:
+      - id: log_sink
+        story: logging
+      - id: destination_bucket
+        story: logging
+        uses: [kms_key_ring]
+      - id: sink_service_account
+        story: logging
+      - id: sink_iam_binding
+        story: logging
+        uses: [sink_service_account, destination_bucket]
+      - id: retention_policy
+        story: logging
+        uses: [destination_bucket]
+    dependencies:
+      - type: demand
+        need: No team has requested or committed to consuming these logs
+
+  - id: redis_session_cache
+    case: "20"
+    expected_readiness: Ready
+    name: Redis cache for session storage
+    sub_modules:
+      - id: memorystore_instance
+        story: cache
+        uses: [shared_vpc]
+      - id: cache_firewall_rule
+        story: cache
+        uses: [shared_vpc]
+      - id: cache_monitoring
+        story: observability
+        uses: [memorystore_instance]
+    dependencies:
+      - type: platform
+        need: Memorystore API enabled
+
+  - id: vertex_ai_workspace
+    case: "21"
+    expected_readiness: Needs decision
+    name: Vertex AI environment for a machine learning team
+    sub_modules:
+      - id: workbench_instance
+        story: workbench
+        uses: [shared_vpc, kms_key_ring]
+      - id: ml_service_account
+        story: workbench
+      - id: ml_iam_bindings
+        story: workbench
+        uses: [ml_service_account]
+      - id: model_endpoint
+        story: serving
+      - id: private_connectivity
+        story: networking
+        uses: [shared_vpc]
+      - id: training_data_bucket
+        story: data
+        uses: [kms_key_ring]
+    dependencies:
+      - type: platform
+        need: Vertex AI API enabled
+      - type: security_iam
+        need: Who is allowed to deploy models
+      - type: approval
+        need: Whether public model endpoints are ever allowed
+
+  - id: document_ai_forms
+    case: "22"
+    expected_readiness: Needs decision
+    name: Document AI for processing scanned forms
+    sub_modules:
+      - id: document_ai_processor
+        story: processing
+      - id: input_bucket
+        story: storage
+        uses: [kms_key_ring]
+      - id: output_bucket
+        story: storage
+        uses: [kms_key_ring]
+      - id: processor_service_account
+        story: processing
+      - id: processor_iam_bindings
+        story: processing
+        uses: [processor_service_account]
+    dependencies:
+      - type: platform
+        need: Document AI API enabled
+      - type: approval
+        need: Which processing region is allowed, since forms may contain personal data
+
+  - id: genai_model_access
+    case: "23"
+    expected_readiness: Needs decision
+    name: Generative AI model access for a customer support assistant
+    sub_modules:
+      - id: genai_service_account
+        story: access
+      - id: genai_iam_bindings
+        story: access
+        uses: [genai_service_account]
+      - id: model_quota
+        story: quota
+      - id: genai_private_connectivity
+        story: networking
+        uses: [shared_vpc]
+      - id: prompt_logging
+        story: governance
+      - id: data_protection_controls
+        story: governance
+    dependencies:
+      - type: platform
+        need: Model API enabled
+      - type: security_iam
+        need: Which identities can call the model
+      - type: approval
+        need: What customer data the model may see, and whether prompts may be logged

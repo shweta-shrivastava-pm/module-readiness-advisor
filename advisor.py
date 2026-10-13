@@ -1,7 +1,8 @@
-"""Module Readiness Advisor, version 0.1.
+"""Module Readiness Advisor, version 0.2.
 
-Reads the inventory and the module catalogue, then prints a readiness
-breakdown for every capability in the catalogue.
+Reads the inventory and the module catalogue, prints a readiness
+breakdown for every capability, then scores itself against the
+expected answers from the evaluation set.
 """
 
 from pathlib import Path
@@ -10,7 +11,10 @@ import yaml
 
 DATA = Path(__file__).parent / "data"
 
-# Dependency types that stop work starting. Platform APIs are usually
+# Dependencies that need a conversation before work can start.
+DECISION_TYPES = {"approval", "demand"}
+
+# Dependencies that stop work starting. Platform APIs are usually
 # quick to switch on, so they are reported but do not block.
 BLOCKING_TYPES = {"module_or_resource", "existing_repository", "networking", "security_iam"}
 
@@ -40,7 +44,7 @@ def assess(capability, existing):
                 )
 
     types = {d["type"] for d in dependencies}
-    if "approval" in types:
+    if types & DECISION_TYPES:
         readiness = "Needs decision"
     elif types & BLOCKING_TYPES:
         readiness = "Blocked"
@@ -52,12 +56,15 @@ def assess(capability, existing):
 
 def main():
     existing = {item["id"] for item in load("inventory.yaml")["existing_resources"]}
+    passed = 0
+    failed = []
+    capabilities = load("catalog.yaml")["capabilities"]
 
-    for capability in load("catalog.yaml")["capabilities"]:
+    for capability in capabilities:
         reuse, build, dependencies, readiness = assess(capability, existing)
 
         print("=" * 60)
-        print(capability["name"])
+        print(f"Case {capability['case']}: {capability['name']}")
         print(f"  Readiness: {readiness}")
         print(f"  Already exists, reuse: {', '.join(sorted(reuse)) or 'nothing'}")
         print("  To build:")
@@ -68,6 +75,17 @@ def main():
             print(f"    - {d['type']}: {d['need']}")
         if not dependencies:
             print("    - none")
+
+        expected = capability.get("expected_readiness")
+        if expected == readiness:
+            passed += 1
+        else:
+            failed.append(f"Case {capability['case']}: expected {expected}, got {readiness}")
+
+    print("=" * 60)
+    print(f"Score: {passed} of {len(capabilities)} cases match the evaluation set")
+    for line in failed:
+        print(f"  MISMATCH  {line}")
 
 
 if __name__ == "__main__":
