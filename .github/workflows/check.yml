@@ -1,0 +1,19 @@
+name: Check advisor
+
+on: [push]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install PyYAML
+        run: pip install pyyaml
+      - name: Run advisor and check the score
+        run: |
+          python advisor.py > result.txt
+          cat result.txt
+          if grep -q MISMATCH result.txt; then exit 1; fi
