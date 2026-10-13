@@ -1,0 +1,25 @@
+# Plain English requests and the capability the AI should pick.
+# expected: null means the request is too vague and the AI should ask back.
+# The last two cover case 15 in the evaluation set.
+
+tests:
+  - request: We need somewhere private and encrypted to keep our application logs
+    expected: private_storage_bucket
+  - request: Our internal API is in a container and should run serverless on Google Cloud
+    expected: cloud_run_internal_api
+  - request: Set up alerts and dashboards for the app we already run in production
+    expected: application_monitoring
+  - request: Our support team wants a chatbot that answers customer questions
+    expected: genai_model_access
+  - request: We scan paper claim forms and want the fields pulled out automatically
+    expected: document_ai_forms
+  - request: We need an in memory cache to hold user sessions
+    expected: redis_session_cache
+  - request: Kubernetes on Azure for our microservices
+    expected: aks_cluster
+  - request: Files land in a bucket every hour and need loading into our warehouse
+    expected: storage_to_warehouse_pipeline
+  - request: Something for our new application
+    expected: null
+  - request: We need some infrastructure soon
+    expected: null
