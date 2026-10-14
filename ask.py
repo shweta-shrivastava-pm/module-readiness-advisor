@@ -7,7 +7,8 @@ readiness, so the AI never decides readiness itself.
 
 Usage:
     py ask.py "We need somewhere private to keep our application logs"
-    py ask.py --test
+    py ask.py --test      run the 10 AI test requests
+    py ask.py --models    list the models your key can use
 
 Needs a free Gemini API key in the GEMINI_API_KEY environment variable.
 Never put the key in a file.
@@ -16,13 +17,38 @@ Never put the key in a file.
 import json
 import os
 import sys
+import time
 
 from google import genai
-from google.genai import types
+from google.genai import errors, types
 
 from advisor import assess, load
 
-MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+MODEL = os.environ.get("GEMINI_MODEL", "gemini-flash-latest")
+
+# Waits in seconds before each retry when the AI service is busy.
+RETRY_WAITS = [5, 15, 30]
+
+
+def call_model(client, prompt):
+    """Call the model, retrying when the service is busy (503) or rate limited (429)."""
+    for attempt, wait in enumerate([0] + RETRY_WAITS):
+        if wait:
+            print(f"  The AI service is busy. Waiting {wait} seconds, then trying again...")
+            time.sleep(wait)
+        try:
+            return client.models.generate_content(
+                model=MODEL,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    temperature=0,
+                ),
+            )
+        except errors.APIError as error:
+            if error.code not in (429, 503) or attempt == len(RETRY_WAITS):
+                raise
+
 
 
 def match_request(client, request, capabilities):
@@ -44,14 +70,7 @@ Never invent an id that is not in the list.
 Reply only with JSON in this shape:
 {{"capability": "<id or null>", "question": "<question or empty>"}}"""
 
-    response = client.models.generate_content(
-        model=MODEL,
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            response_mime_type="application/json",
-            temperature=0,
-        ),
-    )
+    response = call_model(client, prompt)
     answer = json.loads(response.text)
     chosen = answer.get("capability")
     question = answer.get("question") or "Could you describe what the application needs?"
@@ -91,6 +110,7 @@ def run_tests(client, capabilities):
         got = chosen or f"asked back: {question}"
         print(f"{status}  {test['request']}")
         print(f"      expected {expected}, got {got}")
+        time.sleep(4)  # stay inside the free tier limit of requests per minute
     print("=" * 60)
     print(f"AI matching score: {passed} of {len(tests)}")
 
@@ -106,6 +126,13 @@ def main():
         return
 
     client = genai.Client(api_key=key)
+
+    if sys.argv[1] == "--models":
+        for model in client.models.list():
+            if "generateContent" in (model.supported_actions or []):
+                print(model.name.replace("models/", ""))
+        return
+
     capabilities = load("catalog.yaml")["capabilities"]
 
     if sys.argv[1] == "--test":
@@ -113,7 +140,11 @@ def main():
         return
 
     request = " ".join(sys.argv[1:])
-    chosen, question = match_request(client, request, capabilities)
+    try:
+        chosen, question = match_request(client, request, capabilities)
+    except errors.APIError as error:
+        print(f"The AI service could not answer (error {error.code}). Please try again in a few minutes.")
+        return
     if chosen is None:
         print("The request is not clear enough to assess.")
         print(f"Question back to the team: {question}")
